@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(do printf '%s' 'ckRI-TRrRRKKQ0Bxl2bGiw')",
+      "Bash(pnpm list:*)"
+    ]
+  }
+}

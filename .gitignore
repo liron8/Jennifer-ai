@@ -1,0 +1,69 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+.next
+out
+dist
+build
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Other package manager lockfiles
+bun.lockb
+package-lock.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage
+.nyc_output
+
+# Turbo
+.turbo
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+
+# Supabase
+supabase/.branches
+supabase/.temp
+
+# Secrets / env files
+env
+.mcp.json
+
+# Screenshots and images (non-asset)
+*.png
+!apps/web/public/**/*.png
+!apps/web/src/app/icon.png
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Misc
+docs/jenniferai-client-feedback-issues.md

@@ -1,0 +1,6 @@
+[build]
+  command = "npx pnpm@9.15.0 install && npx pnpm@9.15.0 turbo build --filter=@jeniferai/web"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "20"
