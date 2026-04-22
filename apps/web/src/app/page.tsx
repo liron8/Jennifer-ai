@@ -356,7 +356,7 @@ export default function AuthPage() {
                                     {isLoading ? 'Please wait...' : (mode === 'signup' ? 'Get started' : 'Sign in')}
                                 </Button>
                                 <SocialButton 
-                                    social="google" 
+                                    social="microsoft" 
                                     theme="color" 
                                     onClick={handleMicrosoftSignIn}
                                     disabled={isLoading}

@@ -4,7 +4,7 @@ import type { AnchorHTMLAttributes, ButtonHTMLAttributes, DetailedHTMLProps } fr
 import type { ButtonProps as AriaButtonProps } from "react-aria-components";
 import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
 import { cx, sortCx } from "@/utils/cx";
-import { AppleLogo, DribbleLogo, FacebookLogo, FigmaLogo, FigmaLogoOutlined, GoogleLogo, TwitterLogo } from "./social-logos";
+import { AppleLogo, DribbleLogo, FacebookLogo, FigmaLogo, FigmaLogoOutlined, GoogleLogo, MicrosoftLogo, TwitterLogo } from "./social-logos";
 
 export const styles = sortCx({
     common: {
@@ -53,7 +53,7 @@ export const styles = sortCx({
 });
 
 interface CommonProps {
-    social: "google" | "facebook" | "apple" | "twitter" | "figma" | "dribble";
+    social: "google" | "microsoft" | "facebook" | "apple" | "twitter" | "figma" | "dribble";
     disabled?: boolean;
     theme?: "brand" | "color" | "gray";
     size?: keyof typeof styles.sizes;
@@ -75,6 +75,7 @@ export const SocialButton = ({ size = "lg", theme = "brand", social, className, 
 
     const socialToColor = {
         google: "gray",
+        microsoft: "gray",
         facebook: "facebook",
         apple: "black",
         twitter: "black",
@@ -86,6 +87,7 @@ export const SocialButton = ({ size = "lg", theme = "brand", social, className, 
 
     const logos = {
         google: GoogleLogo,
+        microsoft: MicrosoftLogo,
         facebook: FacebookLogo,
         apple: AppleLogo,
         twitter: TwitterLogo,
@@ -136,8 +138,8 @@ export const SocialButton = ({ size = "lg", theme = "brand", social, className, 
                             : "",
                 )}
                 colorful={
-                    (theme === "brand" && (social === "google" || social === "figma")) ||
-                    (theme === "color" && (social === "google" || social === "facebook" || social === "figma" || social === "dribble")) ||
+                    (theme === "brand" && (social === "google" || social === "microsoft" || social === "figma")) ||
+                    (theme === "color" && (social === "google" || social === "microsoft" || social === "facebook" || social === "figma" || social === "dribble")) ||
                     undefined
                 }
             />

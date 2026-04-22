@@ -25,6 +25,17 @@ export const GoogleLogo = ({ colorful, ...props }: SVGProps<SVGSVGElement> & { c
     );
 };
 
+export const MicrosoftLogo = ({ colorful, ...props }: SVGProps<SVGSVGElement> & { colorful?: boolean }) => {
+    return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" {...props}>
+            <rect x="2" y="2" width="9" height="9" fill={colorful ? "#F35325" : "currentColor"} />
+            <rect x="13" y="2" width="9" height="9" fill={colorful ? "#81BC06" : "currentColor"} />
+            <rect x="2" y="13" width="9" height="9" fill={colorful ? "#05A6F0" : "currentColor"} />
+            <rect x="13" y="13" width="9" height="9" fill={colorful ? "#FFBA08" : "currentColor"} />
+        </svg>
+    );
+};
+
 export const FigmaLogo = ({ colorful, ...props }: SVGProps<SVGSVGElement> & { colorful?: boolean }) => {
     return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" {...props}>
