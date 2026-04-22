@@ -29,10 +29,20 @@ export default function OnboardingPage() {
   const TOTAL_STEPS = onboarding.isInvitedUser ? 4 : 6;
   const startStep = onboarding.isInvitedUser ? 2 : 0; // Start at role step for invited users
   const [currentStep, setCurrentStep] = useState(startStep);
+
+  useEffect(() => {
+    const stepParam = new URLSearchParams(window.location.search).get('step');
+    const parsedStep = Number(stepParam);
+    if (!Number.isNaN(parsedStep) && parsedStep >= 0 && parsedStep <= 5) {
+      setCurrentStep(parsedStep);
+    }
+  }, []);
   
   // Update starting step when invited status is determined
   useEffect(() => {
     if (!onboarding.isCheckingStatus && onboarding.isInvitedUser) {
+      const stepParam = new URLSearchParams(window.location.search).get('step');
+      if (stepParam) return;
       setCurrentStep(2); // Skip to "Your Role" step
     }
   }, [onboarding.isCheckingStatus, onboarding.isInvitedUser]);
@@ -671,16 +681,13 @@ function IntegrationsStep({ onBack, onNext }: { onBack: () => void; onNext: () =
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('success') === 'true') {
       fetchIntegrations();
-      window.history.replaceState({}, '', '/onboarding');
+      const step = urlParams.get('step');
+      window.history.replaceState({}, '', step ? `/onboarding?step=${step}` : '/onboarding');
     }
   }, []);
 
-  const handleConnectGoogle = () => {
-    window.location.href = '/api/integrations/google/connect?redirect=/onboarding';
-  };
-
   const handleConnectMicrosoft = () => {
-    window.location.href = '/api/integrations/microsoft/connect?redirect=/onboarding';
+    window.location.href = '/api/integrations/microsoft/connect?redirect=/onboarding?step=4';
   };
 
   const isGoogleConnected = connectedProviders.includes('google');
@@ -695,26 +702,19 @@ function IntegrationsStep({ onBack, onNext }: { onBack: () => void; onNext: () =
         </div>
         <div className="flex flex-col gap-3">
           <button
-            onClick={isGoogleConnected ? undefined : handleConnectGoogle}
-            className={`w-full flex items-center justify-between px-5 py-4 rounded-xl ring-1 ring-inset transition-colors ${isGoogleConnected ? 'ring-success-300 bg-success-50 dark:ring-success-700 dark:bg-success-500/10' : 'ring-primary hover:bg-primary_hover'}`}
+            disabled
+            className="w-full flex items-center justify-between px-5 py-4 rounded-xl ring-1 ring-inset transition-colors ring-primary opacity-60 cursor-not-allowed"
           >
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden">
                 <GoogleCalendarIcon className="w-10 h-10" />
               </div>
               <div className="text-left">
-                <p className="font-semibold text-primary">Google Calendar</p>
+                <p className="font-semibold text-primary">Google Calendar (Coming soon)</p>
                 <p className="text-sm text-tertiary">Sync your Google Calendar events and meetings</p>
               </div>
             </div>
-            {isGoogleConnected ? (
-              <span className="text-success-600 font-semibold flex items-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-                Connected
-              </span>
-            ) : (
-              <span className="text-brand-secondary font-semibold">Connect</span>
-            )}
+            <span className="text-tertiary font-semibold">Coming soon</span>
           </button>
           <button
             onClick={isMicrosoftConnected ? undefined : handleConnectMicrosoft}

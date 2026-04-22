@@ -187,14 +187,14 @@ export default function AuthPage() {
         }
     };
     
-    const handleGoogleSignIn = async () => {
+    const handleMicrosoftSignIn = async () => {
         setIsLoading(true);
         setError(null);
         
         const supabase = createClient();
         
         const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
+            provider: 'azure',
             options: {
                 redirectTo: `${window.location.origin}/api/auth/callback`,
             },
@@ -358,10 +358,10 @@ export default function AuthPage() {
                                 <SocialButton 
                                     social="google" 
                                     theme="color" 
-                                    onClick={handleGoogleSignIn}
+                                    onClick={handleMicrosoftSignIn}
                                     disabled={isLoading}
                                 >
-                                    {mode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
+                                    {mode === 'signup' ? 'Sign up with Microsoft' : 'Sign in with Microsoft'}
                                 </SocialButton>
                             </div>
                         </form>

@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
                             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600">
                                 <span className="text-lg font-bold text-white">J</span>
                             </div>
-                            <span className="text-xl font-semibold text-primary">JeniferAI</span>
+                            <span className="text-xl font-semibold text-primary">JenniferAI</span>
                         </div>
                     </header>
                     <div className="flex flex-1 justify-center px-4 py-12 md:items-center md:px-8 md:py-0">
@@ -85,10 +85,10 @@ export default function ForgotPasswordPage() {
                         </div>
                     </div>
                     <footer className="hidden justify-between p-8 pt-11 lg:flex">
-                        <p className="text-sm text-tertiary">© JeniferAI {new Date().getFullYear()}</p>
-                        <a href="mailto:support@jeniferai.com" className="flex items-center gap-2 text-sm text-tertiary">
+                        <p className="text-sm text-tertiary">© JenniferAI {new Date().getFullYear()}</p>
+                        <a href="mailto:Support@tryjennifer.com" className="flex items-center gap-2 text-sm text-tertiary">
                             <Mail01 className="size-4 text-fg-quaternary" />
-                            support@jeniferai.com
+                            Support@tryjennifer.com
                         </a>
                     </footer>
                 </div>
@@ -106,7 +106,7 @@ export default function ForgotPasswordPage() {
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600">
                             <span className="text-lg font-bold text-white">J</span>
                         </div>
-                        <span className="text-xl font-semibold text-primary">JeniferAI</span>
+                        <span className="text-xl font-semibold text-primary">JenniferAI</span>
                     </div>
                 </header>
                 <div className="flex flex-1 justify-center px-4 py-12 md:items-center md:px-8 md:py-0">
@@ -169,10 +169,10 @@ export default function ForgotPasswordPage() {
                 </div>
 
                 <footer className="hidden justify-between p-8 pt-11 lg:flex">
-                    <p className="text-sm text-tertiary">© JeniferAI {new Date().getFullYear()}</p>
-                    <a href="mailto:support@jeniferai.com" className="flex items-center gap-2 text-sm text-tertiary">
+                    <p className="text-sm text-tertiary">© JenniferAI {new Date().getFullYear()}</p>
+                    <a href="mailto:Support@tryjennifer.com" className="flex items-center gap-2 text-sm text-tertiary">
                         <Mail01 className="size-4 text-fg-quaternary" />
-                        support@jeniferai.com
+                        Support@tryjennifer.com
                     </a>
                 </footer>
             </div>
