@@ -2,6 +2,11 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import {
+  getExecutivesPerSeat,
+  inferPlanIntervalFromStripePrice,
+  normalizePlanId,
+} from '@/config/billing';
 
 function getStripeClient() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -14,6 +19,23 @@ function getSupabaseAdmin() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+}
+
+function mergeBillingSettings(
+  settings: unknown,
+  update: Record<string, unknown>,
+): Record<string, unknown> {
+  const current = (settings && typeof settings === 'object' ? settings : {}) as Record<string, unknown>;
+  const billing = (current.billing && typeof current.billing === 'object')
+    ? (current.billing as Record<string, unknown>)
+    : {};
+  return {
+    ...current,
+    billing: {
+      ...billing,
+      ...update,
+    },
+  };
 }
 
 export async function POST(request: Request) {
@@ -63,12 +85,22 @@ export async function POST(request: Request) {
           ? session.subscription
           : session.subscription.id;
 
+        const { data: currentOrg } = await supabase
+          .from('organizations')
+          .select('settings')
+          .eq('id', session.metadata.org_id)
+          .single();
+        const settings = mergeBillingSettings(currentOrg?.settings, {
+          cancellation_feedback: null,
+        });
+
         await supabase
           .from('organizations')
           .update({
             stripe_customer_id: session.customer as string,
             stripe_subscription_id: subscriptionId,
             subscription_status: 'active',
+            settings,
             updated_at: new Date().toISOString(),
           })
           .eq('id', session.metadata.org_id);
@@ -88,17 +120,38 @@ export async function POST(request: Request) {
       const item = subscription.items.data[0];
       const priceId = item?.price?.id;
 
-      // Determine tier from price metadata or product
-      let tier = 'pro';
+      // Determine tier/interval from known configured Stripe Price IDs.
+      let tier = normalizePlanId(subscription.metadata?.plan_id) || 'starter';
+      let interval: 'monthly' | 'annual' = subscription.metadata?.interval === 'annual' ? 'annual' : 'monthly';
       if (priceId) {
+        const inferred = inferPlanIntervalFromStripePrice(priceId);
+        if (inferred.planId) tier = inferred.planId;
+        if (inferred.interval) interval = inferred.interval;
         try {
           const price = await stripe.prices.retrieve(priceId, { expand: ['product'] });
           const product = price.product as Stripe.Product;
-          tier = product.metadata?.tier || product.name?.toLowerCase() || 'pro';
+          tier = normalizePlanId(product.metadata?.tier || product.name) || tier;
         } catch {
           // Use default tier
         }
       }
+
+      const subData = subscription as unknown as Record<string, unknown>;
+      const currentPeriodEnd = typeof subData.current_period_end === 'number'
+        ? new Date(subData.current_period_end * 1000).toISOString()
+        : null;
+      const { data: currentOrg } = await supabase
+        .from('organizations')
+        .select('settings')
+        .eq('stripe_customer_id', customerId)
+        .single();
+      const settings = mergeBillingSettings(currentOrg?.settings, {
+        plan_id: tier,
+        interval,
+        executives_per_seat: getExecutivesPerSeat(tier),
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        current_period_end: currentPeriodEnd,
+      });
 
       await supabase
         .from('organizations')
@@ -106,6 +159,7 @@ export async function POST(request: Request) {
           stripe_subscription_id: subscription.id,
           subscription_status: subscription.status,
           subscription_tier: tier,
+          settings,
           updated_at: new Date().toISOString(),
         })
         .eq('stripe_customer_id', customerId);
@@ -120,11 +174,21 @@ export async function POST(request: Request) {
         ? subscription.customer
         : subscription.customer.id;
 
+      const { data: currentOrg } = await supabase
+        .from('organizations')
+        .select('settings')
+        .eq('stripe_customer_id', customerId)
+        .single();
+      const settings = mergeBillingSettings(currentOrg?.settings, {
+        cancel_at_period_end: false,
+      });
+
       await supabase
         .from('organizations')
         .update({
-          subscription_status: 'cancelled',
-          subscription_tier: 'free',
+          subscription_status: 'canceled',
+          subscription_tier: null,
+          settings,
           updated_at: new Date().toISOString(),
         })
         .eq('stripe_customer_id', customerId);

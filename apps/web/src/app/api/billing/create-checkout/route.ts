@@ -8,6 +8,7 @@ import Stripe from 'stripe';
 import { withAuth, type AuthContext } from '@/lib/api/middleware';
 import { successResponse, internalErrorResponse, badRequestResponse } from '@/lib/api/utils';
 import { createClient } from '@/lib/supabase/server';
+import { resolveStripePriceId, type BillingInterval, type BillingPlanId } from '@/config/billing';
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -18,10 +19,15 @@ function getStripe() {
 async function handlePost(request: NextRequest, context: AuthContext) {
   try {
     const body = await request.json();
-    const { price_id } = body;
+    const { price_id, plan_id, interval } = body;
+    const resolvedPlan = plan_id as BillingPlanId | undefined;
+    const resolvedInterval = (interval as BillingInterval | undefined) || 'annual';
+    const selectedPriceId =
+      (typeof price_id === 'string' ? price_id : null) ||
+      (resolvedPlan ? resolveStripePriceId(resolvedPlan, resolvedInterval) : null);
 
-    if (!price_id) {
-      return badRequestResponse('price_id is required');
+    if (!selectedPriceId) {
+      return badRequestResponse('price_id (or valid plan_id + interval) is required');
     }
 
     const stripe = getStripe();
@@ -62,14 +68,16 @@ async function handlePost(request: NextRequest, context: AuthContext) {
       payment_method_types: ['card'],
       line_items: [
         {
-          price: price_id,
+          price: selectedPriceId,
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?tab=billing&checkout=success`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?tab=billing&checkout=cancelled`,
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005'}/settings?tab=billing&checkout=success`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005'}/settings?tab=billing&checkout=cancelled`,
       metadata: {
         org_id: context.user.org_id,
+        plan_id: resolvedPlan || 'starter',
+        interval: resolvedInterval,
       },
     });
 

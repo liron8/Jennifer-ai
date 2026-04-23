@@ -8,6 +8,13 @@ import Stripe from 'stripe';
 import { withAuth, type AuthContext } from '@/lib/api/middleware';
 import { successResponse, internalErrorResponse } from '@/lib/api/utils';
 import { createClient } from '@/lib/supabase/server';
+import {
+  getExecutivesPerSeat,
+  inferPlanIntervalFromStripePrice,
+  normalizePlanId,
+  type BillingInterval,
+  type BillingPlanId,
+} from '@/config/billing';
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -22,16 +29,28 @@ async function handleGet(request: NextRequest, context: AuthContext) {
     // Get organization's Stripe customer ID
     const { data: org } = await supabase
       .from('organizations')
-      .select('stripe_customer_id, stripe_subscription_id, subscription_tier, subscription_status')
+      .select('stripe_customer_id, stripe_subscription_id, subscription_tier, subscription_status, settings')
       .eq('id', context.user.org_id)
       .single();
 
+    const orgSettings = (org?.settings && typeof org.settings === 'object')
+      ? (org.settings as Record<string, unknown>)
+      : {};
+    const orgBillingSettings = (orgSettings.billing && typeof orgSettings.billing === 'object')
+      ? (orgSettings.billing as Record<string, unknown>)
+      : {};
+
     if (!org?.stripe_customer_id || !org?.stripe_subscription_id) {
+      const defaultPlan: BillingPlanId = 'starter';
+      const defaultInterval: BillingInterval = 'annual';
       return successResponse({
-        plan: 'free',
-        status: 'active',
+        plan: 'starter',
+        plan_id: defaultPlan,
+        interval: defaultInterval,
+        status: org?.subscription_status || 'inactive',
         current_period_end: null,
         cancel_at_period_end: false,
+        executives_per_seat: getExecutivesPerSeat(defaultPlan),
         payment_method: null,
       });
     }
@@ -61,6 +80,10 @@ async function handleGet(request: NextRequest, context: AuthContext) {
     const item = subscription.items.data[0];
     const price = item?.price;
     const product = price?.product as Stripe.Product | undefined;
+    const inferred = inferPlanIntervalFromStripePrice(price?.id);
+    const planId = inferred.planId || normalizePlanId(org.subscription_tier) || 'starter';
+    const interval = inferred.interval ||
+      (price?.recurring?.interval === 'year' ? 'annual' : 'monthly');
 
     // Stripe v20 removed current_period_end from the Subscription type,
     // but it's still returned in the API response at runtime
@@ -71,9 +94,13 @@ async function handleGet(request: NextRequest, context: AuthContext) {
 
     return successResponse({
       plan: product?.name || org.subscription_tier || 'pro',
+      plan_id: planId,
+      interval,
       status: subscription.status,
       current_period_end: periodEnd,
       cancel_at_period_end: subscription.cancel_at_period_end,
+      executives_per_seat: getExecutivesPerSeat(planId),
+      cancellation_feedback: orgBillingSettings.cancellation_feedback || null,
       payment_method: paymentMethod,
       price_amount: price?.unit_amount ? price.unit_amount / 100 : null,
       price_interval: price?.recurring?.interval || null,
@@ -82,10 +109,13 @@ async function handleGet(request: NextRequest, context: AuthContext) {
     console.error('Error fetching subscription:', error);
     // Return default free plan on error
     return successResponse({
-      plan: 'free',
-      status: 'active',
+      plan: 'starter',
+      plan_id: 'starter',
+      interval: 'annual',
+      status: 'inactive',
       current_period_end: null,
       cancel_at_period_end: false,
+      executives_per_seat: 1,
       payment_method: null,
     });
   }

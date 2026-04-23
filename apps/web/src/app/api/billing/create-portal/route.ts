@@ -35,7 +35,7 @@ async function handlePost(request: NextRequest, context: AuthContext) {
     // Create customer portal session
     const session = await stripe.billingPortal.sessions.create({
       customer: org.stripe_customer_id,
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?tab=billing`,
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005'}/settings?tab=billing`,
     });
 
     return successResponse({ url: session.url });

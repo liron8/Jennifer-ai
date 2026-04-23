@@ -13,7 +13,13 @@
         "MICROSOFT_REDIRECT_URI",
         "ANTHROPIC_API_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "STRIPE_SECRET_KEY"
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "NEXT_PUBLIC_APP_URL",
+        "STRIPE_PRICE_STARTER_MONTHLY",
+        "STRIPE_PRICE_STARTER_ANNUAL",
+        "STRIPE_PRICE_STRATEGIST_MONTHLY",
+        "STRIPE_PRICE_STRATEGIST_ANNUAL"
       ],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },

@@ -12,6 +12,7 @@ import { CreditCard02, Plus, SearchLg, RefreshCw01, Clock } from "@untitledui/ic
 import { integrationLogos } from "./_components/integration-logos";
 import { PreferencesTab } from "./_components/preferences-tab";
 import { InviteMemberSlideout, type InviteMemberData } from "./_components/invite-member-slideout";
+import { BillingSettingsTab } from "./_components/billing-settings-tab";
 import { TabList, Tabs } from "@/components/application/tabs/tabs";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Button } from "@/components/base/buttons/button";
@@ -72,7 +73,7 @@ export default function SettingsPage() {
       {selectedTab === "preferences" && <PreferencesTab />}
       {selectedTab === "integrations" && <IntegrationsTab />}
       {selectedTab === "team" && <TeamTab />}
-      {selectedTab === "billing" && <BillingTab />}
+      {selectedTab === "billing" && <BillingSettingsTab />}
       {selectedTab === "audit" && <AuditTab />}
     </div>
   );
