@@ -399,12 +399,14 @@ export function useMeetingLog(
 export interface RouteMeeting {
   id: string;
   title: string;
+  description?: string;
   start_time: string;
   end_time: string;
   location?: string;
   location_details?: string;
   meeting_type: string;
   executive_id?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface RouteInfo {

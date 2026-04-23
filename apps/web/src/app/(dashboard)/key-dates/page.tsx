@@ -25,6 +25,7 @@ import { EditDateSlideout } from "./_components/edit-date-slideout";
 import { useKeyDates, type DatabaseKeyDate, type CreateKeyDateData } from "@/hooks/useKeyDates";
 import { ConfirmDeleteDialog } from "@/components/application/confirm-delete-dialog";
 import { notify } from "@/lib/notifications";
+import { formatKeyDate } from "@/lib/date-format";
 
 type ViewMode = "list" | "card" | "calendar";
 
@@ -57,18 +58,17 @@ function parseRecurrenceRule(rule: string | null | undefined): RecurringType {
 
 // Convert database key date to UI format
 const convertToUIKeyDate = (dbKeyDate: DatabaseKeyDate): KeyDate => {
-  // Format the date for display
-  // Append T12:00:00 to avoid timezone offset shifting the date by a day
-  const dateObj = new Date(dbKeyDate.date + 'T12:00:00');
-  let dateString = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  let dateString = formatKeyDate(dbKeyDate.date);
+  const dateObj = new Date(`${dbKeyDate.date}T12:00:00`);
   
   // Handle date ranges (end_date)
   if (dbKeyDate.end_date) {
-    const endDateObj = new Date(dbKeyDate.end_date + 'T12:00:00');
+    const endDateObj = new Date(`${dbKeyDate.end_date}T12:00:00`);
     if (dateObj.getMonth() === endDateObj.getMonth() && dateObj.getFullYear() === endDateObj.getFullYear()) {
-      dateString = `${dateObj.toLocaleDateString("en-US", { month: "short" })} ${dateObj.getDate()}-${endDateObj.getDate()}, ${dateObj.getFullYear()}`;
+      const month = dateObj.toLocaleDateString("en-GB", { month: "short" });
+      dateString = `${String(dateObj.getDate()).padStart(2, "0")}-${String(endDateObj.getDate()).padStart(2, "0")} ${month}, ${dateObj.getFullYear()}`;
     } else {
-      const endStr = endDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const endStr = formatKeyDate(dbKeyDate.end_date);
       dateString = `${dateString} - ${endStr}`;
     }
   }
@@ -208,7 +208,10 @@ export default function KeyDatesPage() {
     const groups: Record<string, KeyDate[]> = {};
 
     filteredDates.forEach((date) => {
-      const month = date.date.split(" ")[0] + " " + date.date.split(" ")[2]?.replace(",", "") || "2026";
+      const parsed = new Date(date.date.replace(",", ""));
+      const month = !isNaN(parsed.getTime())
+        ? parsed.toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+        : "Unknown";
       if (!groups[month]) groups[month] = [];
       groups[month].push(date);
     });

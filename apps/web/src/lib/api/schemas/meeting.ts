@@ -52,6 +52,7 @@ export const updateMeetingSchema = z.object({
   meeting_type: meetingTypeSchema.optional(),
   attendees: z.array(attendeeSchema).optional(),
   notes: z.string().max(10000).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const meetingQuerySchema = z.object({

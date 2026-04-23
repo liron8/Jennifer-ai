@@ -80,8 +80,8 @@ export const getDatesByCategory = (dates: KeyDate[], category: KeyDateCategory |
 // Helper to sort dates
 export const sortDatesByDate = (dates: KeyDate[]): KeyDate[] => {
   return [...dates].sort((a, b) => {
-    const dateA = new Date(a.date.split("-")[0]);
-    const dateB = new Date(b.date.split("-")[0]);
+    const dateA = new Date(a.date.replace(",", "").split(" - ")[0]);
+    const dateB = new Date(b.date.replace(",", "").split(" - ")[0]);
     return dateA.getTime() - dateB.getTime();
   });
 };

@@ -88,6 +88,18 @@ interface ProfileData {
   role: string;
   job_title?: string;
   phone?: string;
+  phone_extension?: string | null;
+  secondary_email?: string | null;
+  secondary_phone?: string | null;
+  additional_office_address?: string | null;
+  religion?: "Christian" | "Hindu" | "Jewish" | "Muslim" | null;
+  emergency_contacts?: Array<{
+    name: string;
+    relationship?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+  }>;
 }
 
 function ProfileTab() {
@@ -112,6 +124,14 @@ function ProfileTab() {
   const [phoneExtension, setPhoneExtension] = useState("");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [secondaryEmail, setSecondaryEmail] = useState("");
+  const [secondaryPhone, setSecondaryPhone] = useState("");
+  const [additionalOfficeAddress, setAdditionalOfficeAddress] = useState("");
+  const [religion, setReligion] = useState<"" | "Christian" | "Hindu" | "Jewish" | "Muslim">("");
+  const [emergencyContacts, setEmergencyContacts] = useState([
+    { name: "", relationship: "", phone: "", email: "", address: "" },
+    { name: "", relationship: "", phone: "", email: "", address: "" },
+  ]);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -170,6 +190,27 @@ function ProfileTab() {
           setPhoneExtension(profileData.phone_extension || "");
           setTimezone(profileData.timezone || "America/Los_Angeles");
           setAvatarUrl(profileData.avatar_url || null);
+          setSecondaryEmail(profileData.secondary_email || "");
+          setSecondaryPhone(profileData.secondary_phone || "");
+          setAdditionalOfficeAddress(profileData.additional_office_address || "");
+          setReligion(profileData.religion || "");
+          const contacts = Array.isArray(profileData.emergency_contacts) ? profileData.emergency_contacts : [];
+          setEmergencyContacts([
+            {
+              name: contacts[0]?.name || "",
+              relationship: contacts[0]?.relationship || "",
+              phone: contacts[0]?.phone || "",
+              email: contacts[0]?.email || "",
+              address: contacts[0]?.address || "",
+            },
+            {
+              name: contacts[1]?.name || "",
+              relationship: contacts[1]?.relationship || "",
+              phone: contacts[1]?.phone || "",
+              email: contacts[1]?.email || "",
+              address: contacts[1]?.address || "",
+            },
+          ]);
         }
       } catch (err) {
         console.error('Failed to fetch profile:', err);
@@ -193,6 +234,19 @@ function ProfileTab() {
           job_title: jobTitle || null,
           phone: phone || null,
           phone_extension: phoneExtension || null,
+          secondary_email: secondaryEmail || null,
+          secondary_phone: secondaryPhone || null,
+          additional_office_address: additionalOfficeAddress || null,
+          religion: religion || null,
+          emergency_contacts: emergencyContacts
+            .map((contact) => ({
+              name: contact.name.trim(),
+              relationship: contact.relationship.trim() || undefined,
+              phone: contact.phone.trim() || undefined,
+              email: contact.email.trim() || undefined,
+              address: contact.address.trim() || undefined,
+            }))
+            .filter((contact) => contact.name),
           timezone,
         }),
       });
@@ -218,6 +272,27 @@ function ProfileTab() {
       setPhone(profile.phone || "");
       setPhoneExtension((profile as any).phone_extension || "");
       setTimezone(profile.timezone || "America/Los_Angeles");
+      setSecondaryEmail(profile.secondary_email || "");
+      setSecondaryPhone(profile.secondary_phone || "");
+      setAdditionalOfficeAddress(profile.additional_office_address || "");
+      setReligion(profile.religion || "");
+      const contacts = Array.isArray(profile.emergency_contacts) ? profile.emergency_contacts : [];
+      setEmergencyContacts([
+        {
+          name: contacts[0]?.name || "",
+          relationship: contacts[0]?.relationship || "",
+          phone: contacts[0]?.phone || "",
+          email: contacts[0]?.email || "",
+          address: contacts[0]?.address || "",
+        },
+        {
+          name: contacts[1]?.name || "",
+          relationship: contacts[1]?.relationship || "",
+          phone: contacts[1]?.phone || "",
+          email: contacts[1]?.email || "",
+          address: contacts[1]?.address || "",
+        },
+      ]);
     }
   };
 
@@ -395,6 +470,110 @@ function ProfileTab() {
                   { label: "(UTC+13:00) Nuku'alofa, Samoa", value: "Pacific/Tongatapu" },
                 ]}
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-secondary">Religion</label>
+              <NativeSelect
+                size="sm"
+                value={religion}
+                onChange={(e) => setReligion(e.target.value as typeof religion)}
+                options={[
+                  { label: "None", value: "" },
+                  { label: "Christian", value: "Christian" },
+                  { label: "Hindu", value: "Hindu" },
+                  { label: "Jewish", value: "Jewish" },
+                  { label: "Muslim", value: "Muslim" },
+                ]}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-secondary">Second email</label>
+              <Input
+                size="sm"
+                value={secondaryEmail}
+                onChange={(val) => setSecondaryEmail(val)}
+                placeholder="name+alt@company.com"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-secondary">Second phone</label>
+              <Input
+                size="sm"
+                value={secondaryPhone}
+                onChange={(val) => setSecondaryPhone(val)}
+                placeholder="+1 (555) 000-0000"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-secondary">Additional office address</label>
+              <Input
+                size="sm"
+                value={additionalOfficeAddress}
+                onChange={(val) => setAdditionalOfficeAddress(val)}
+                placeholder="Suite, floor, or secondary office"
+              />
+            </div>
+            <div className="flex flex-col gap-2 md:col-span-2">
+              <label className="text-sm font-medium text-secondary">Emergency contacts</label>
+              {emergencyContacts.map((contact, index) => (
+                <div key={index} className="rounded-lg border border-secondary p-3">
+                  <p className="mb-2 text-xs font-semibold text-tertiary">Contact {index + 1}</p>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <Input
+                      size="sm"
+                      value={contact.name}
+                      onChange={(val) =>
+                        setEmergencyContacts((prev) =>
+                          prev.map((item, i) => (i === index ? { ...item, name: val } : item))
+                        )
+                      }
+                      placeholder="Name"
+                    />
+                    <Input
+                      size="sm"
+                      value={contact.relationship}
+                      onChange={(val) =>
+                        setEmergencyContacts((prev) =>
+                          prev.map((item, i) => (i === index ? { ...item, relationship: val } : item))
+                        )
+                      }
+                      placeholder="Relationship"
+                    />
+                    <Input
+                      size="sm"
+                      value={contact.phone}
+                      onChange={(val) =>
+                        setEmergencyContacts((prev) =>
+                          prev.map((item, i) => (i === index ? { ...item, phone: val } : item))
+                        )
+                      }
+                      placeholder="Phone"
+                    />
+                    <Input
+                      size="sm"
+                      value={contact.email}
+                      onChange={(val) =>
+                        setEmergencyContacts((prev) =>
+                          prev.map((item, i) => (i === index ? { ...item, email: val } : item))
+                        )
+                      }
+                      placeholder="Email"
+                    />
+                    <div className="md:col-span-2">
+                      <Input
+                        size="sm"
+                        value={contact.address}
+                        onChange={(val) =>
+                          setEmergencyContacts((prev) =>
+                            prev.map((item, i) => (i === index ? { ...item, address: val } : item))
+                          )
+                        }
+                        placeholder="Address"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

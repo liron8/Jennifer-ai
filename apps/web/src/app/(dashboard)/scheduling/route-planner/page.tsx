@@ -16,8 +16,11 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Calendar,
   Truck01,
+  Plus,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   HomeLine,
   MarkerPin01,
@@ -36,6 +39,7 @@ import {
 import { Button } from "@/components/base/buttons/button";
 import { BadgeWithDot } from "@/components/base/badges/badges";
 import { Avatar } from "@/components/base/avatar/avatar";
+import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
 import { AddStopSlideout, type StopFormData } from "../_components/add-stop-slideout";
 import { useRoutePlanner, useRouteDirections, type RouteMeeting, type RouteInfo, type BufferWarning, type TrafficAlert } from "@/hooks/useDashboard";
 import { RouteMap } from "@/components/maps/RouteMap";
@@ -47,21 +51,36 @@ import {
   type CalendarEventData 
 } from "@/lib/calendar-links";
 import { notify } from "@/lib/notifications";
+import {
+  addDays,
+  calculateLeaveByTime,
+  fromDateAndTime,
+  normalizeAddress,
+  resolveStopNote,
+  toTimeInputValue,
+} from "@/lib/route-planner";
 
 // Meeting location type for display
 interface MeetingLocation {
   id: string;
   title: string;
   address: string;
-  time: string;
-  endTime: string;
+  meetingStartLabel: string;
+  meetingEndLabel: string;
+  startTime: Date;
+  endTime: Date;
   duration: string;
   type: "client" | "personal" | "internal";
   driveTime?: string;
   distance?: string;
   trafficCondition?: 'light' | 'moderate' | 'heavy' | 'severe';
   arrivalTime?: Date;
+  leaveByTime?: Date;
+  bufferMinutes: number;
   hasBufferWarning?: boolean;
+  notes?: string;
+  stopKind?: "meeting" | "meal" | "quick_stop";
+  mealType?: string;
 }
 
 // Helper to format time from ISO string
@@ -92,7 +111,9 @@ const mapMeetingToLocation = (
   meeting: RouteMeeting, 
   routeInfo?: RouteInfo,
   arrivalTime?: Date,
-  hasBufferWarning?: boolean
+  hasBufferWarning?: boolean,
+  bufferMinutes: number = 0,
+  leaveByTime?: Date
 ): MeetingLocation => {
   // Map meeting_type to display type
   const typeMap: Record<string, "client" | "personal" | "internal"> = {
@@ -109,15 +130,28 @@ const mapMeetingToLocation = (
     id: meeting.id,
     title: meeting.title,
     address: meeting.location || meeting.location_details || "Address not specified",
-    time: formatTime(meeting.start_time),
-    endTime: formatTime(meeting.end_time),
+    meetingStartLabel: formatTime(meeting.start_time),
+    meetingEndLabel: formatTime(meeting.end_time),
+    startTime: new Date(meeting.start_time),
+    endTime: new Date(meeting.end_time),
     duration: calculateDuration(meeting.start_time, meeting.end_time),
     type: typeMap[meeting.meeting_type] || "internal",
     driveTime: routeInfo?.duration_text,
     distance: routeInfo?.distance_text,
     trafficCondition: routeInfo?.traffic_condition,
     arrivalTime,
+    leaveByTime,
+    bufferMinutes,
     hasBufferWarning,
+    notes: resolveStopNote(meeting.description, meeting.metadata),
+    stopKind:
+      typeof meeting.metadata?.stop_kind === "string"
+        ? (meeting.metadata.stop_kind as "meeting" | "meal" | "quick_stop")
+        : "meeting",
+    mealType:
+      typeof meeting.metadata?.meal_type === "string"
+        ? String(meeting.metadata.meal_type)
+        : undefined,
   };
 };
 
@@ -166,33 +200,11 @@ const getTypeColor = (type: MeetingLocation["type"]) => {
 };
 
 export default function RoutePlannerPage() {
-  // Fetch start location from executive profile
+  const [defaultHomeLocation, setDefaultHomeLocation] = useState("Loading...");
   const [startLocation, setStartLocation] = useState("Loading...");
-
-  useEffect(() => {
-    async function fetchExecutiveLocation() {
-      try {
-        const response = await fetch('/api/executives?page_size=1');
-        if (!response.ok) return;
-        const result = await response.json();
-        const executives = result.data?.data ?? result.data ?? [];
-        if (Array.isArray(executives) && executives.length > 0) {
-          const exec = executives[0];
-          const address = exec.home_address || exec.office_address || exec.main_office_location;
-          if (address) {
-            setStartLocation(address);
-            return;
-          }
-        }
-      } catch {
-        // Fall through to default
-      }
-      setStartLocation("Home address not set — update in executive profile");
-    }
-    fetchExecutiveLocation();
-  }, []);
-
-  const endLocation = startLocation;
+  const [favoriteLocations, setFavoriteLocations] = useState<Array<{ label: string; address: string }>>([]);
+  const [isEditingStart, setIsEditingStart] = useState(false);
+  const [startLocationInput, setStartLocationInput] = useState("");
 
   // Date state - default to today
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -200,10 +212,14 @@ export default function RoutePlannerPage() {
     return today.toISOString().split('T')[0];
   });
   const [isAddStopOpen, setIsAddStopOpen] = useState(false);
+  const [isQuickStopsOpen, setIsQuickStopsOpen] = useState(false);
   const [meetingOrder, setMeetingOrder] = useState<string[]>([]);
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const [isCalendarMenuOpen, setIsCalendarMenuOpen] = useState(false);
+  const [meetingStartOverrides, setMeetingStartOverrides] = useState<Record<string, string>>({});
+  const [stopBuffers, setStopBuffers] = useState<Record<string, number>>({});
+  const [noteEdits, setNoteEdits] = useState<Record<string, string>>({});
   
   // Departure time state - default to 8:30 AM on selected date
   const [departureTime, setDepartureTime] = useState<Date>(() => {
@@ -211,6 +227,67 @@ export default function RoutePlannerPage() {
     today.setHours(8, 30, 0, 0);
     return today;
   });
+
+  useEffect(() => {
+    async function fetchDefaultStartLocation() {
+      let resolvedHome: string | null = null;
+      let resolvedOffice: string | null = null;
+      let resolvedGym: string | null = null;
+      try {
+        const profileRes = await fetch("/api/settings/profile");
+        if (profileRes.ok) {
+          const profileResult = await profileRes.json();
+          const profile = profileResult.data?.data ?? profileResult.data ?? {};
+          const profileHome = normalizeAddress(profile.home_address);
+          const settings = (profile.settings || {}) as Record<string, unknown>;
+          const routeSettings = (settings.route_planner || {}) as Record<string, unknown>;
+          const favorites = (routeSettings.favorite_locations || {}) as Record<string, unknown>;
+          resolvedHome = profileHome || normalizeAddress(favorites.home);
+          resolvedOffice = normalizeAddress(profile.office_address) || normalizeAddress(favorites.office);
+          resolvedGym = normalizeAddress(favorites.gym);
+        }
+      } catch {
+        // no-op fallback below
+      }
+
+      if (!resolvedHome || !resolvedOffice) {
+        try {
+          const response = await fetch("/api/executives?page_size=1");
+          if (response.ok) {
+            const result = await response.json();
+            const executives = result.data?.data ?? result.data ?? [];
+            if (Array.isArray(executives) && executives.length > 0) {
+              const exec = executives[0];
+              resolvedHome = resolvedHome || normalizeAddress(exec.home_address);
+              resolvedOffice =
+                resolvedOffice ||
+                normalizeAddress(exec.office_address) ||
+                normalizeAddress(exec.main_office_location);
+            }
+          }
+        } catch {
+          // no-op
+        }
+      }
+
+      const homeAddress = resolvedHome || "Home address not set — update in Settings > Profile";
+      setDefaultHomeLocation(homeAddress);
+      setStartLocation(homeAddress);
+      setStartLocationInput(homeAddress);
+
+      const nextFavorites = [
+        homeAddress && !homeAddress.startsWith("Home address not set")
+          ? { label: "Home", address: homeAddress }
+          : null,
+        resolvedOffice ? { label: "Office", address: resolvedOffice } : null,
+        resolvedGym ? { label: "Gym", address: resolvedGym } : null,
+      ].filter((item): item is { label: string; address: string } => Boolean(item));
+      setFavoriteLocations(nextFavorites);
+    }
+    fetchDefaultStartLocation();
+  }, []);
+
+  const endLocation = defaultHomeLocation;
 
   // Fetch in-person meetings for the selected date
   const { meetings: apiMeetings, isLoading, error, refetch } = useRoutePlanner(selectedDate);
@@ -252,6 +329,24 @@ export default function RoutePlannerPage() {
       .filter((m): m is RouteMeeting => m !== undefined);
   }, [apiMeetings, meetingOrder]);
 
+  useEffect(() => {
+    const nextNotes: Record<string, string> = {};
+    const nextBuffers: Record<string, number> = {};
+    const nextOverrides: Record<string, string> = {};
+    orderedMeetings.forEach((meeting) => {
+      nextNotes[meeting.id] = resolveStopNote(meeting.description, meeting.metadata);
+      const metadata = (meeting.metadata || {}) as Record<string, unknown>;
+      const buffer = Number(metadata.route_buffer_minutes);
+      if (!Number.isNaN(buffer) && buffer > 0) {
+        nextBuffers[meeting.id] = buffer;
+      }
+      nextOverrides[meeting.id] = toTimeInputValue(new Date(meeting.start_time));
+    });
+    setNoteEdits(nextNotes);
+    setStopBuffers((prev) => ({ ...nextBuffers, ...prev }));
+    setMeetingStartOverrides((prev) => ({ ...nextOverrides, ...prev }));
+  }, [orderedMeetings]);
+
   // Transform to display format with route info, arrival times, and warnings
   const displayMeetings: MeetingLocation[] = useMemo(() => {
     const warningMeetingIds = new Set(bufferWarnings.map(w => orderedMeetings[w.meetingIndex]?.id));
@@ -260,9 +355,27 @@ export default function RoutePlannerPage() {
       const routeInfo = routes[index];
       const arrivalTime = arrivalTimes[index];
       const hasWarning = warningMeetingIds.has(meeting.id);
-      return mapMeetingToLocation(meeting, routeInfo, arrivalTime, hasWarning);
+      const startOverride = meetingStartOverrides[meeting.id];
+      const effectiveMeetingStart = startOverride
+        ? fromDateAndTime(selectedDate, startOverride)
+        : new Date(meeting.start_time);
+      const bufferMinutes = stopBuffers[meeting.id] ?? 0;
+      const leaveBy =
+        routeInfo && effectiveMeetingStart
+          ? calculateLeaveByTime({
+              meetingStart: effectiveMeetingStart,
+              travelDurationSeconds: routeInfo.duration_seconds,
+              bufferMinutes,
+            }).leaveBy
+          : undefined;
+
+      const hydrated: RouteMeeting = {
+        ...meeting,
+        start_time: effectiveMeetingStart.toISOString(),
+      };
+      return mapMeetingToLocation(hydrated, routeInfo, arrivalTime, hasWarning, bufferMinutes, leaveBy);
     });
-  }, [orderedMeetings, routes, arrivalTimes, bufferWarnings]);
+  }, [orderedMeetings, routes, arrivalTimes, bufferWarnings, meetingStartOverrides, selectedDate, stopBuffers]);
 
   // Calculate routes when meetings or departure time change
   useEffect(() => {
@@ -270,11 +383,11 @@ export default function RoutePlannerPage() {
       const locations = [
         startLocation,
         ...orderedMeetings.map(m => m.location || "Unknown location"),
-        startLocation,
+        endLocation,
       ];
       calculateRoutes(locations, orderedMeetings, departureTime);
     }
-  }, [orderedMeetings, calculateRoutes, startLocation, departureTime]);
+  }, [orderedMeetings, calculateRoutes, startLocation, endLocation, departureTime]);
 
   // Calculate final arrival time (back home)
   const finalArrivalTime = useMemo(() => {
@@ -358,13 +471,150 @@ export default function RoutePlannerPage() {
         return;
       }
 
-      notify.success("Stop added", `"${stopData.title}" has been added to your route.`);
+      notify.success("Stop added", `"${stopData.title}" has been added to the route.`);
       refetch();
     } catch (err) {
       console.error("Failed to add stop:", err);
       notify.error("Failed to add stop", "An unexpected error occurred.");
     }
   };
+
+  const saveStopNote = useCallback(async (meetingId: string) => {
+    const note = noteEdits[meetingId] ?? "";
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ description: note }),
+      });
+      if (!res.ok) {
+        notify.error("Failed to save note", "Please try again.");
+        return;
+      }
+      notify.success("Note saved", "Stop note updated.");
+      refetch();
+    } catch {
+      notify.error("Failed to save note", "Please try again.");
+    }
+  }, [noteEdits, refetch]);
+
+  const updateStopBuffer = useCallback(async (meetingId: string, minutes: number) => {
+    setStopBuffers((prev) => ({ ...prev, [meetingId]: minutes }));
+    try {
+      const meeting = orderedMeetings.find((m) => m.id === meetingId);
+      const metadata = { ...(meeting?.metadata || {}), route_buffer_minutes: minutes };
+      await fetch(`/api/meetings/${meetingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ metadata }),
+      });
+    } catch {
+      // keep local override even if persistence fails
+    }
+  }, [orderedMeetings]);
+
+  const updateMeetingStartTime = useCallback(async (meeting: RouteMeeting, timeValue: string) => {
+    setMeetingStartOverrides((prev) => ({ ...prev, [meeting.id]: timeValue }));
+    const updatedStart = fromDateAndTime(selectedDate, timeValue);
+    const originalStart = new Date(meeting.start_time);
+    const originalEnd = new Date(meeting.end_time);
+    const durationMs = originalEnd.getTime() - originalStart.getTime();
+    const updatedEnd = new Date(updatedStart.getTime() + durationMs);
+
+    try {
+      const response = await fetch(`/api/meetings/${meeting.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          start_time: updatedStart.toISOString(),
+          end_time: updatedEnd.toISOString(),
+        }),
+      });
+      if (!response.ok) {
+        notify.error("Failed to update meeting start", "Please try again.");
+        return;
+      }
+      refetch();
+    } catch {
+      notify.error("Failed to update meeting start", "Please try again.");
+    }
+  }, [selectedDate, refetch]);
+
+  const addQuickStop = useCallback(async (label: string, address: string) => {
+    const lastMeeting = orderedMeetings[orderedMeetings.length - 1];
+    const baseDate = lastMeeting ? new Date(lastMeeting.end_time) : fromDateAndTime(selectedDate, "09:00");
+    const start = new Date(baseDate.getTime() + 15 * 60_000);
+    const end = new Date(start.getTime() + 30 * 60_000);
+    const body = {
+      title: `Back to ${label}`,
+      description: `${label} quick stop`,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      is_all_day: false,
+      location_type: "in_person",
+      location: address,
+      meeting_type: "other",
+      attendees: [],
+      is_recurring: false,
+      metadata: { source: "route-planner-quick-stop", stop_kind: "quick_stop" },
+    };
+    const res = await fetch("/api/meetings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      notify.success("Quick stop added", `Added ${label} to this route.`);
+      setIsQuickStopsOpen(false);
+      refetch();
+      return;
+    }
+    notify.error("Failed to add quick stop", "Please try again.");
+  }, [orderedMeetings, selectedDate, refetch]);
+
+  const addMealStop = useCallback(async (mealType: "breakfast" | "lunch" | "dinner") => {
+    const defaults: Record<typeof mealType, { time: string; durationMins: number }> = {
+      breakfast: { time: "08:00", durationMins: 30 },
+      lunch: { time: "12:30", durationMins: 45 },
+      dinner: { time: "18:30", durationMins: 60 },
+    };
+    const config = defaults[mealType];
+    const start = fromDateAndTime(selectedDate, config.time);
+    const end = new Date(start.getTime() + config.durationMins * 60_000);
+    const locationFallback = favoriteLocations.find((f) => f.label === "Office")?.address || startLocation;
+
+    const res = await fetch("/api/meetings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        title: mealType.charAt(0).toUpperCase() + mealType.slice(1),
+        description: `${mealType} break`,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        is_all_day: false,
+        location_type: "in_person",
+        location: locationFallback,
+        meeting_type: "other",
+        attendees: [],
+        is_recurring: false,
+        metadata: { source: "route-planner-meal", stop_kind: "meal", meal_type: mealType },
+      }),
+    });
+    if (res.ok) {
+      notify.success("Meal stop added", `${mealType} has been added to the route.`);
+      setIsQuickStopsOpen(false);
+      refetch();
+      return;
+    }
+    notify.error("Failed to add meal stop", "Please try again.");
+  }, [favoriteLocations, selectedDate, startLocation, refetch]);
 
   const moveMeeting = (index: number, direction: "up" | "down") => {
     const newOrder = [...meetingOrder];
@@ -381,7 +631,7 @@ export default function RoutePlannerPage() {
     const locations = [
       startLocation,
       ...orderedMeetings.map(m => m.location || ""),
-      startLocation,
+      endLocation,
     ];
     
     const optimizedLocations = await optimizeRoute(locations, orderedMeetings);
@@ -391,7 +641,7 @@ export default function RoutePlannerPage() {
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
       .map(m => m.id);
     setMeetingOrder(newOrder);
-  }, [orderedMeetings, optimizeRoute, startLocation]);
+  }, [orderedMeetings, optimizeRoute, startLocation, endLocation]);
 
   // Generate shareable links
   const googleMapsUrl = useMemo(() => {
@@ -399,10 +649,10 @@ export default function RoutePlannerPage() {
     const locations = [
       startLocation,
       ...orderedMeetings.map(m => m.location || ""),
-      startLocation,
+      endLocation,
     ];
     return getGoogleMapsUrl(locations);
-  }, [orderedMeetings, startLocation, getGoogleMapsUrl]);
+  }, [orderedMeetings, startLocation, endLocation, getGoogleMapsUrl]);
 
   // Copy route to clipboard
   const copyRouteToClipboard = useCallback(() => {
@@ -411,7 +661,7 @@ export default function RoutePlannerPage() {
       `Departure: ${departureTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} from ${startLocation}`,
       '',
       ...displayMeetings.map((m, i) => 
-        `${i + 1}. ${m.title}\n   📍 ${m.address}\n   🕐 ${m.time} (${m.duration})\n   🚗 ${m.driveTime || 'N/A'}`
+        `${i + 1}. ${m.title}\n   📍 ${m.address}\n   🕐 ${m.meetingStartLabel} (${m.duration})\n   🚗 ${m.driveTime || 'N/A'}\n   ⏱ Leave by ${m.leaveByTime ? m.leaveByTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "N/A"}`
       ),
       '',
       `Total Drive Time: ${totalDuration}`,
@@ -522,17 +772,49 @@ export default function RoutePlannerPage() {
           <p className="text-sm text-tertiary">Optimize travel routes for out-of-office meetings</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg border border-secondary bg-primary px-3 py-2">
-            <Calendar className="h-4 w-4 text-fg-quaternary" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
+          <div className="flex items-center gap-2 rounded-lg border border-secondary bg-primary px-2 py-1.5">
+            <button
+              onClick={() => {
+                setSelectedDate((prev) => addDays(prev, -1));
                 setMeetingOrder([]);
               }}
-              className="text-sm font-medium text-primary bg-transparent border-none outline-none cursor-pointer"
-            />
+              className="rounded-md p-1 hover:bg-secondary"
+              aria-label="Go to previous day"
+            >
+              <ChevronLeft className="h-4 w-4 text-fg-quaternary" />
+            </button>
+            <button
+              onClick={() => {
+                const today = new Date().toISOString().split("T")[0];
+                setSelectedDate(today);
+                setMeetingOrder([]);
+              }}
+              className="min-w-44 text-sm font-semibold text-primary"
+            >
+              Today · {displayDate}
+            </button>
+            <button
+              onClick={() => {
+                setSelectedDate((prev) => addDays(prev, 1));
+                setMeetingOrder([]);
+              }}
+              className="rounded-md p-1 hover:bg-secondary"
+              aria-label="Go to next day"
+            >
+              <ChevronRight className="h-4 w-4 text-fg-quaternary" />
+            </button>
+            <label className="ml-1 cursor-pointer rounded-md p-1 hover:bg-secondary" title="Pick date">
+              <Calendar className="h-4 w-4 text-fg-quaternary" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setMeetingOrder([]);
+                }}
+                className="sr-only"
+              />
+            </label>
           </div>
           <Button size="md" color="secondary" iconLeading={RefreshCw01} onClick={() => refetch()} disabled={isLoading}>
             {isLoading ? "Loading..." : "Refresh"}
@@ -619,10 +901,61 @@ export default function RoutePlannerPage() {
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Start: Home</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">{startLocation}</p>
+              {isEditingStart ? (
+                <input
+                  value={startLocationInput}
+                  onChange={(e) => setStartLocationInput(e.target.value)}
+                  onBlur={() => {
+                    const next = startLocationInput.trim() || defaultHomeLocation;
+                    setStartLocation(next);
+                    setStartLocationInput(next);
+                    setIsEditingStart(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const next = startLocationInput.trim() || defaultHomeLocation;
+                      setStartLocation(next);
+                      setStartLocationInput(next);
+                      setIsEditingStart(false);
+                    } else if (e.key === "Escape") {
+                      setStartLocationInput(startLocation);
+                      setIsEditingStart(false);
+                    }
+                  }}
+                  autoFocus
+                  list="route-planner-favorites"
+                  className="w-full rounded-md border border-secondary bg-primary px-2 py-1 text-xs text-gray-700 dark:text-gray-300"
+                />
+              ) : (
+                <button
+                  onClick={() => setIsEditingStart(true)}
+                  className="text-left text-xs text-gray-600 underline decoration-dotted underline-offset-4 dark:text-gray-400"
+                  title="Edit start location for this plan"
+                >
+                  {startLocation}
+                </button>
+              )}
+              <datalist id="route-planner-favorites">
+                {favoriteLocations.map((favorite) => (
+                  <option key={favorite.label} value={favorite.address}>
+                    {favorite.label}
+                  </option>
+                ))}
+              </datalist>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-500 mb-1">Depart</p>
+              <div className="mb-1 flex items-center justify-end gap-1">
+                <p className="text-xs text-gray-500">Est. daily departure</p>
+                <Tooltip
+                  title="Typical morning departure time from home. Adjust for this day if needed."
+                  placement="top"
+                  arrow
+                >
+                  <TooltipTrigger aria-label="Departure time help">
+                    <AlertCircle className="h-3.5 w-3.5 text-gray-400" />
+                  </TooltipTrigger>
+                </Tooltip>
+              </div>
               <input
                 type="time"
                 value={`${String(departureTime.getHours()).padStart(2, '0')}:${String(departureTime.getMinutes()).padStart(2, '0')}`}
@@ -737,11 +1070,57 @@ export default function RoutePlannerPage() {
                       <div className="mt-3 flex items-center gap-3">
                         <div className="flex items-center gap-1.5 rounded-lg bg-white/60 px-2 py-1 dark:bg-gray-800/60">
                           <Clock className="h-3.5 w-3.5 text-blue-500" />
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{meeting.time}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">Meeting start</span>
+                            <input
+                              type="time"
+                              value={meetingStartOverrides[meeting.id] || toTimeInputValue(meeting.startTime)}
+                              onChange={(e) => setMeetingStartOverrides((prev) => ({ ...prev, [meeting.id]: e.target.value }))}
+                              onBlur={() => {
+                                const sourceMeeting = orderedMeetings.find((m) => m.id === meeting.id);
+                                if (sourceMeeting) {
+                                  void updateMeetingStartTime(sourceMeeting, meetingStartOverrides[meeting.id] || toTimeInputValue(meeting.startTime));
+                                }
+                              }}
+                              className="rounded border border-secondary bg-primary px-1.5 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300"
+                            />
+                          </div>
                         </div>
                         <div className="flex items-center gap-1.5 rounded-lg bg-white/60 px-2 py-1 dark:bg-gray-800/60">
                           <span className="text-xs text-gray-600 dark:text-gray-400">{meeting.duration}</span>
                         </div>
+                        <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1 dark:bg-amber-900/30">
+                          <span className="text-xs text-amber-700 dark:text-amber-400">
+                            {meeting.leaveByTime
+                              ? `Leave by ${meeting.leaveByTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} to arrive by ${meeting.meetingStartLabel}`
+                              : "Leave by: —"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 rounded-lg bg-white/60 px-2 py-1 dark:bg-gray-800/60">
+                          <span className="text-xs text-gray-500">Buffer</span>
+                          <select
+                            value={stopBuffers[meeting.id] ?? 0}
+                            onChange={(e) => void updateStopBuffer(meeting.id, Number(e.target.value))}
+                            className="bg-transparent text-xs text-gray-700 outline-none dark:text-gray-300"
+                          >
+                            <option value={0}>+0m</option>
+                            <option value={5}>+5m</option>
+                            <option value={10}>+10m</option>
+                            <option value={15}>+15m</option>
+                            <option value={20}>+20m</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <label className="mb-1 block text-[11px] font-medium text-gray-500">Notes</label>
+                        <textarea
+                          value={noteEdits[meeting.id] ?? ""}
+                          onChange={(e) => setNoteEdits((prev) => ({ ...prev, [meeting.id]: e.target.value }))}
+                          onBlur={() => void saveStopNote(meeting.id)}
+                          rows={2}
+                          placeholder="Parking, suite, or lobby instructions..."
+                          className="w-full rounded-lg border border-secondary bg-primary px-2 py-1.5 text-xs text-primary placeholder:text-quaternary"
+                        />
                       </div>
                     </div>
                   </div>
@@ -825,7 +1204,7 @@ export default function RoutePlannerPage() {
               {isCalendarMenuOpen && (
                 <div className="absolute left-0 top-full mt-2 w-64 rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-800 z-20">
                   <p className="px-3 py-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-                    Add travel time blocks to your calendar
+                    Add travel time blocks to calendar
                   </p>
                   <button
                     onClick={addToGoogleCalendar}
@@ -964,6 +1343,36 @@ export default function RoutePlannerPage() {
             <Button size="sm" color="secondary" iconLeading={Building07} onClick={() => setIsAddStopOpen(true)}>
               Add Stop
             </Button>
+          </div>
+          <div className="relative">
+            <Button
+              size="sm"
+              color="secondary"
+              iconLeading={Plus}
+              onClick={() => setIsQuickStopsOpen((prev) => !prev)}
+            >
+              Quick stops
+            </Button>
+            {isQuickStopsOpen && (
+              <div className="absolute z-20 mt-2 w-72 rounded-lg border border-secondary bg-primary p-2 shadow-lg">
+                <p className="px-2 py-1 text-xs font-semibold text-tertiary">Common stops</p>
+                {favoriteLocations.map((favorite) => (
+                  <button
+                    key={favorite.label}
+                    onClick={() => addQuickStop(favorite.label, favorite.address)}
+                    className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-secondary"
+                  >
+                    <span>Back to {favorite.label}</span>
+                    <span className="text-xs text-tertiary">Add</span>
+                  </button>
+                ))}
+                <div className="my-1 h-px bg-secondary" />
+                <p className="px-2 py-1 text-xs font-semibold text-tertiary">Meals</p>
+                <button onClick={() => addMealStop("breakfast")} className="w-full rounded-md px-2 py-2 text-left text-sm hover:bg-secondary">Breakfast (30 min)</button>
+                <button onClick={() => addMealStop("lunch")} className="w-full rounded-md px-2 py-2 text-left text-sm hover:bg-secondary">Lunch (45 min)</button>
+                <button onClick={() => addMealStop("dinner")} className="w-full rounded-md px-2 py-2 text-left text-sm hover:bg-secondary">Dinner (60 min)</button>
+              </div>
+            )}
           </div>
         </div>
       </div>
