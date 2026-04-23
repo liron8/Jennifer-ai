@@ -13,7 +13,6 @@ import {
 } from '@/lib/api/utils';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import type { Json } from '@jeniferai/core-database/src/database.types';
 import { RELIGION_HOLIDAYS, RELIGION_OPTIONS, type Religion } from '@/lib/religion-key-dates';
 
 const religionSchema = z.enum(RELIGION_OPTIONS);
@@ -51,7 +50,7 @@ const updateProfileSchema = z.object({
 
 type EmergencyContact = z.infer<typeof emergencyContactSchema>;
 
-function getProfileExtras(preferences: Json | null | undefined): {
+function getProfileExtras(preferences: unknown): {
   secondary_email: string | null;
   secondary_phone: string | null;
   additional_office_address: string | null;

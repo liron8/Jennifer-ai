@@ -1,16 +1,16 @@
-export type Religion = "Christian" | "Hindu" | "Jewish" | "Muslim";
+export const RELIGION_OPTIONS = [
+  "Christian",
+  "Hindu",
+  "Jewish",
+  "Muslim",
+] as const;
+
+export type Religion = (typeof RELIGION_OPTIONS)[number];
 
 export interface ReligionHoliday {
   date: string; // YYYY-MM-DD
   title: string;
 }
-
-export const RELIGION_OPTIONS: Array<Religion> = [
-  "Christian",
-  "Hindu",
-  "Jewish",
-  "Muslim",
-];
 
 export const RELIGION_HOLIDAYS: Record<Religion, ReligionHoliday[]> = {
   Christian: [
