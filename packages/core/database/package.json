@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
+    "lint": "eslint -c ../../../eslint.config.mjs \"src/**/*.{ts,tsx}\"",
     "db:migrate": "echo 'Run migrations via supabase CLI'",
     "db:types": "echo 'Generate types via supabase CLI'"
   },
@@ -19,6 +19,7 @@
     "@supabase/supabase-js": "^2.47.10"
   },
   "devDependencies": {
+    "@types/node": "^24",
     "typescript": "^5.9.3"
   }
 }

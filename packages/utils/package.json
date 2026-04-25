@@ -15,6 +15,7 @@
     "date-fns-tz": "^3.2.0"
   },
   "devDependencies": {
+    "@types/node": "^24",
     "typescript": "^5.9.3"
   }
 }

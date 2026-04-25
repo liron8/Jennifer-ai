@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC, ReactNode } from "react";
+import Link from "next/link";
 import { Bell01, LifeBuoy01, SearchLg, Settings01 } from "@untitledui/icons";
 import { Button as AriaButton, DialogTrigger, Popover } from "react-aria-components";
 import { Avatar } from "@/components/base/avatar/avatar";
@@ -103,13 +104,13 @@ export const HeaderNavigationBase = ({
                 >
                     <div className="flex w-full max-w-container justify-between pr-3 pl-4 md:px-8">
                         <div className="flex flex-1 items-center gap-4">
-                            <a
+                            <Link
                                 aria-label="Go to homepage"
                                 href="/"
                                 className="rounded-xs outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
                             >
                                 <UntitledLogo className="h-8" />
-                            </a>
+                            </Link>
 
                             <nav>
                                 <ul className="flex items-center gap-0.5">

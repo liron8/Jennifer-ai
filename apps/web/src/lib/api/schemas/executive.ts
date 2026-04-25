@@ -4,6 +4,23 @@
 
 import { z } from 'zod';
 
+const RELIGION_OPTIONS = ['Christian', 'Hindu', 'Jewish', 'Muslim'] as const;
+
+const religionSchema = z.preprocess((value) => {
+  if (value == null) return null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === 'none' || normalized === 'n/a' || normalized === 'na') {
+    return null;
+  }
+  if (normalized === 'christen') return 'Christian';
+  if (normalized === 'christian') return 'Christian';
+  if (normalized === 'hindu') return 'Hindu';
+  if (normalized === 'jewish') return 'Jewish';
+  if (normalized === 'muslim') return 'Muslim';
+  return value;
+}, z.enum(RELIGION_OPTIONS).nullable());
+
 export const phoneEntrySchema = z.object({
   type: z.enum(['mobile', 'office', 'home', 'assistant', 'other']),
   number: z.string().min(1).max(50),
@@ -107,7 +124,7 @@ export const updateExecutiveSchema = z.object({
   tea_order: z.string().max(500).optional().nullable(),
   snack_preferences: z.string().max(1000).optional().nullable(),
   // P2-12: Religion
-  religion: z.string().max(100).optional().nullable(),
+  religion: religionSchema.optional(),
   // P2-13: Approval threshold
   approval_threshold: z.number().min(0).optional().nullable(),
   // P2-15: Medical

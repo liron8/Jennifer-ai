@@ -68,6 +68,19 @@ const convertToUIExecutive = (dbExec: DatabaseExecutive): Executive & { home_add
   };
 };
 
+const RELIGION_OPTIONS = ["", "Christian", "Hindu", "Jewish", "Muslim"] as const;
+
+function normalizeReligionValue(value: unknown): (typeof RELIGION_OPTIONS)[number] {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "none" || normalized === "n/a" || normalized === "na") return "";
+  if (normalized === "christen" || normalized === "christian") return "Christian";
+  if (normalized === "hindu") return "Hindu";
+  if (normalized === "jewish") return "Jewish";
+  if (normalized === "muslim") return "Muslim";
+  return "";
+}
+
 export default function ExecutiveProfilePage() {
   const params = useParams();
   const executiveId = params.id as string;
@@ -132,7 +145,7 @@ export default function ExecutiveProfilePage() {
     dietary_restrictions: '', favorite_cuisines: '',
   });
   // P2-12/13: Religion & approval
-  const [religionForm, setReligionForm] = useState('');
+  const [religionForm, setReligionForm] = useState<(typeof RELIGION_OPTIONS)[number]>("");
   const [approvalForm, setApprovalForm] = useState('');
   // P2-15: Medical
   const [medicalForm, setMedicalForm] = useState({
@@ -599,7 +612,7 @@ export default function ExecutiveProfilePage() {
         favorite_cuisines: (rawExecData?.favorite_cuisines || []).join(', '),
       });
     } else if (section === 'personal') {
-      setReligionForm(rawExecData?.religion || '');
+      setReligionForm(normalizeReligionValue(rawExecData?.religion));
       setApprovalForm(rawExecData?.approval_threshold != null ? String(rawExecData.approval_threshold) : '');
     } else if (section === 'medical') {
       setMedicalForm({
@@ -1497,7 +1510,18 @@ export default function ExecutiveProfilePage() {
               <div className="space-y-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-tertiary">Religion</label>
-                  <input value={religionForm} onChange={(e) => setReligionForm(e.target.value)} placeholder="e.g., Christian, Jewish, Muslim, Buddhist" className="w-full rounded-lg border border-secondary bg-primary px-3 py-2 text-sm text-primary placeholder:text-quaternary focus:border-brand-300 focus:outline-none focus:ring-4 focus:ring-brand-100" />
+                  <NativeSelect
+                    size="sm"
+                    value={religionForm}
+                    onChange={(e) => setReligionForm(e.target.value as (typeof RELIGION_OPTIONS)[number])}
+                    options={[
+                      { label: "None", value: "" },
+                      { label: "Christian", value: "Christian" },
+                      { label: "Hindu", value: "Hindu" },
+                      { label: "Jewish", value: "Jewish" },
+                      { label: "Muslim", value: "Muslim" },
+                    ]}
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-tertiary">Approval Threshold ($)</label>

@@ -226,7 +226,7 @@ export function EditMeetingSlideout({
               <div className="text-center">
                 <h3 className="text-lg font-semibold text-primary">Cancel this event?</h3>
                 <p className="mt-1 text-sm text-tertiary">
-                  Are you sure you want to cancel "{meeting.title}"? It will be removed from your calendar (including connected Outlook / Google calendars) and cannot be recovered.
+                  {`Are you sure you want to cancel "${meeting.title}"? It will be removed from your calendar (including connected Outlook / Google calendars) and cannot be recovered.`}
                 </p>
               </div>
               <div className="flex gap-3 mt-4">

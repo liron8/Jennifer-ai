@@ -221,8 +221,13 @@ async function handlePatch(
           .contains('tags', ['religion-sync'])
           .eq('org_id', context.user.org_id);
 
-        // Insert new holidays if religion is set
-        if (body.religion) {
+        // Insert new holidays if religion is set (narrow: z.preprocess widens inferred type)
+        if (
+          body.religion === 'Christian' ||
+          body.religion === 'Hindu' ||
+          body.religion === 'Jewish' ||
+          body.religion === 'Muslim'
+        ) {
           const holidays = getReligiousHolidays(body.religion);
           if (holidays.length > 0) {
             const year = new Date().getFullYear();

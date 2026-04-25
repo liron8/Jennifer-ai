@@ -5,7 +5,7 @@
  * Components for protecting routes based on authentication state
  */
 
-import React, { useEffect, type ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import { useAuthContext } from './provider';
 
 interface AuthGuardProps {
